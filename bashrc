@@ -15,6 +15,32 @@ cd() {
     fi
 }
 
+# Avoid mistakenly deleting files when using -d and -r
+rm() {
+  local flag_only_d=false
+  local flag_only_r=false
+
+  # Check if -d or -r are used WITHOUT -f
+  if [[ "$*" == *"-d"* ]] && [[ "$*" != *"-f"* ]]; then
+    flag_only_d=true
+  fi
+  if [[ "$*" == *"-r"* ]] && [[ "$*" != *"-f"* ]]; then
+    flag_only_r=true
+  fi
+
+  if $flag_only_d || $flag_only_r; then
+    for arg in "$@"; do
+      [[ "$arg" == -* ]] && continue
+      if [[ ! -d "$arg" ]]; then
+        echo "rm: '$arg' is not a directory. Use plain 'rm' to remove files." >&2
+        return 1
+      fi
+    done
+  fi
+    
+  command rm "$@"
+}
+
 
 # Make a directory and enter that new directory
 mkdircd() {
