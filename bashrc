@@ -1,34 +1,7 @@
 # .bashrc
 
-# Source global definitions
-if [ -f /etc/bashrc ]; then
-    . /etc/bashrc
-fi
-
-# User specific environment
-if ! [[ "$PATH" =~ "$HOME/.local/bin:$HOME/bin:" ]]; then
-    PATH="$HOME/.local/bin:$HOME/bin:$PATH"
-fi
-export PATH
-
-# Uncomment the following line if you don't like systemctl's auto-paging feature:
-# export SYSTEMD_PAGER=
-
-# User specific aliases and functions
-if [ -d ~/.bashrc.d ]; then
-    for rc in ~/.bashrc.d/*; do
-        if [ -f "$rc" ]; then
-            . "$rc"
-        fi
-    done
-fi
-unset rc
-
-
-# Release any chrome profiles locks on startup in the case that chrome incorrectly terminated during shutdown
-if [ -f "$HOME/.config/chromium/SingletonLock" ]; then
-    rm -f "$HOME/.config/chromium/SingletonLock"
-fi
+alias p='python3'
+alias d='dolphin'
 
 # cd is cd+ls
 # cd -s is regular cd
@@ -81,99 +54,6 @@ alias c='clear'
 alias topg='top -E g'
 # Bluetooth restart alias
 alias rbt='systemctl restart bluetooth'
-# Unzip and delete
-unziprm() {
-    unzip "$1"
-    rm "$1"
-}
-
-# Recursive shred
-smr() {
-    if [ -z "$1" ]; then
-        echo "usage: smr <directory>"
-        return 1
-    fi
-
-    if [ ! -d "$1" ]; then
-        echo "not a directory: $1"
-        return 1
-    fi
-
-    printf "Shred and remove '%s'? [y/N]: " "$1"
-    read -r ans
-    case "$ans" in
-        [yY][eE][sS]|[yY]) ;;
-        *) echo "aborted"; return 1 ;;
-    esac
-
-    if ! find "$1" -type f -exec shred -u {} +; then
-        echo "shred failed; directory not removed"
-        return 1
-    fi
-
-    rm -r "$1"
-}
-
-
-# Quick compile asm
-asm32() {
-    if [ -z "$1" ]; then
-        echo "No file provided"
-        return 1
-    fi
-    filename="${1%.*}"
-    nasm -f elf "$1" -o "${filename}.o"
-    ld -m elf_i386 -o "$filename" "${filename}.o"
-}
-asm64() {
-    if [ -z "$1" ]; then
-        echo "No file provided"
-        return 1
-    fi
-
-    filename="${1%.*}"
-    nasm -f elf64 "$1" -o "${filename}.o"
-    ld -o "$filename" "${filename}.o"
-}
-
-# Mount usb
-mnt() {
-    # Verify the user added the decive as an argument
-    if [ -z "$1" ]; then
-        echo "Usage: mnt <device>"
-        return 1
-    fi
-	# Ask for sudo
-	if ! sudo -v; then
-        return 1
-    fi
-    # Create the directory if it exists
-	if [ ! -d /mnt/$1 ]; then
-	   sudo mkdir /mnt/$1
-	fi
-	if ! sudo mount /dev/$1 /mnt/$1; then
-	   return 1
-	fi
-	cd /mnt/$1/
-}
-
-# Unmount usb
-unmnt() {
-    # Verify the user added the decive as an argument
-    if [ -z "$1" ]; then
-		echo "Usage: unmnt <device>"
-		return 1
-	fi
-    # Ask for sudo
-	if ! sudo -v; then
-        return 1
-    fi
-	# Return to main directory if the user is in the drives directory
-	if pwd | grep -q "/mnt/$1"; then
-	    cd
-	fi
-	sudo umount /dev/$1
-}
 
 # Poweroff hard drive
 poffdrive() {
@@ -328,3 +208,52 @@ gpgdecrypt() {
     	return 1
     fi
 }
+
+export EDITOR=/usr/bin/vim
+export VISUAL=/usr/bin/vim
+
+# ─── Tailscale SSH Gate ────────────────────────────────────────────
+
+_TS_ZONE="trusted"
+_TS_INTERFACE="tailscale0"
+
+ssh-on() {
+  sudo systemctl start sshd &&
+  sudo firewall-cmd --permanent --zone=$_TS_ZONE --add-interface=$_TS_INTERFACE 2>/dev/null
+  sudo firewall-cmd --permanent --zone=$_TS_ZONE --add-service=ssh &&
+  sudo firewall-cmd --reload &&
+  echo "[$(date)] SSH enabled on zone: $_TS_ZONE ($_TS_INTERFACE)" | sudo tee -a /var/log/ssh-gate.log &&
+  echo "✔ Incoming SSH enabled"
+}
+
+ssh-off() {
+  sudo firewall-cmd --permanent --zone=$_TS_ZONE --remove-service=ssh &&
+  sudo firewall-cmd --reload &&
+  sudo ss -K dport = 22 2>/dev/null
+  sudo systemctl stop sshd &&
+  echo "[$(date)] SSH disabled, active sessions killed" | sudo tee -a /var/log/ssh-gate.log &&
+  echo "✔ Incoming SSH disabled"
+}
+
+ssh-status() {
+  echo "=== SSHD ==="
+  systemctl is-active sshd
+
+  echo "=== Firewall ==="
+  if sudo firewall-cmd --zone=$_TS_ZONE --query-service=ssh 2>&1 | grep -q "yes"; then
+    echo "SSH: OPEN"
+  else
+    echo "SSH: BLOCKED"
+  fi
+
+  echo "=== Tailscale Interface ==="
+  if sudo firewall-cmd --zone=$_TS_ZONE --list-interfaces 2>&1 | grep -q "$_TS_INTERFACE"; then
+    echo "$_TS_INTERFACE: in zone $_TS_ZONE"
+  else
+    echo "$_TS_INTERFACE: NOT in zone $_TS_ZONE"
+  fi
+
+  echo "=== Active SSH Sessions ==="
+  ss -tnp dport = 22 | grep -v "^State" || echo "None"
+}
+
