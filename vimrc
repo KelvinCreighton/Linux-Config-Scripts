@@ -5,6 +5,8 @@ set shiftwidth=4      " Set the number of spaces used for each step of (auto)ind
 set expandtab         " Convert tabs to spaces
 set hlsearch
 
+autocmd FileType markdown syn clear markdownError
+
 cnoreabbrev W w
 cnoreabbrev Q q
 
