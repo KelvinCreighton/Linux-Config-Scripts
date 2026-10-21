@@ -49,12 +49,36 @@ u3tunnel() {
 }
  
 # numbered directory listing
-# numbered directory listing
+_DIGITS=1234qwerasdfzxcv
+
+# index (0-based) -> label, result in REPLY
+_ncode() {
+  local n=$1 s=
+  while :; do
+    s=${_DIGITS:n%16:1}$s
+    ((n /= 16, n == 0)) && break
+  done
+  REPLY=$s
+}
+
+# label -> index (0-based), result in REPLY; returns 1 if invalid
+_ndecode() {
+  local s=$1 c rest v=0 i
+  [[ $s =~ ^[1-4qwerasdfzxcv]+$ ]] || return 1
+  [[ ${#s} -gt 1 && $s == 1* ]] && return 1   # "1" is zero, so no leading 1s
+  for ((i = 0; i < ${#s}; i++)); do
+    c=${s:i:1}; rest=${_DIGITS%%"$c"*}
+    v=$((v * 16 + ${#rest}))
+  done
+  REPLY=$v
+}
+
 lsn() {
   local old=$(shopt -p nullglob dotglob); shopt -s nullglob
-  local i=1 d f
+  local i=0 d f
   for d in */; do
-    printf '%d: %s\n' "$i" "${d%/}"
+    _ncode $i
+    printf '%s: %s\n' "$REPLY" "${d%/}"
     ((i++))
   done
   for f in *; do
@@ -62,6 +86,24 @@ lsn() {
   done
   eval "$old"
 }
+
+_numcd() {
+  local n=${READLINE_LINE//[[:space:]]/}
+  _ndecode "$n" || return
+  local idx=$REPLY
+  local old=$(shopt -p nullglob dotglob); shopt -s nullglob
+  local dirs=(*/)
+  eval "$old"
+  local d=${dirs[idx]}
+  if [[ -n $d ]]; then
+    READLINE_LINE="cd -- ${d@Q}"
+    READLINE_POINT=${#READLINE_LINE}
+  fi
+}
+bind -x '"\C-x\C-n": _numcd'
+bind '"\C-m": "\C-x\C-n\C-j"'
+
+
 
 # cd is cd+ls
 # cd -s is regular cd
@@ -73,21 +115,6 @@ cd() {
         builtin cd "$@" && lsn
     fi
 }
-
-_numcd() {
-  local n=${READLINE_LINE//[[:space:]]/}
-  [[ $n =~ ^[0-9]+$ ]] || return
-  local old=$(shopt -p nullglob dotglob); shopt -s nullglob
-  local dirs=(*/)
-  eval "$old"
-  local d=${dirs[$((10#$n - 1))]}
-  if [[ -n $d ]]; then
-    READLINE_LINE="cd -- ${d@Q}"
-    READLINE_POINT=${#READLINE_LINE}
-  fi
-}
-bind -x '"\C-x\C-n": _numcd'
-bind '"\C-m": "\C-x\C-n\C-j"'
 
 
 alias john='$HOME/Cybersec_tools/john/run/john'
