@@ -1,7 +1,66 @@
 # .bashrc
 
+# Source global definitions
+if [ -f /etc/bashrc ]; then
+    . /etc/bashrc
+fi
+
+# User specific environment
+if ! [[ "$PATH" =~ "$HOME/.local/bin:$HOME/bin:" ]]; then
+    PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+fi
+export PATH
+
+if [ -f "$HOME/.config/chromium/SingletonLock" ]; then
+    rm -f "$HOME/.config/chromium/SingletonLock"
+fi
+
+# Uncomment the following line if you don't like systemctl's auto-paging feature:
+# export SYSTEMD_PAGER=
+
+# User specific aliases and functions
+if [ -d ~/.bashrc.d ]; then
+    for rc in ~/.bashrc.d/*; do
+        if [ -f "$rc" ]; then
+            . "$rc"
+        fi
+    done
+fi
+unset rc
+
+
+HISTCONTROL=ignorespace
+bind '"\e[1;3A": "\C-a\C-k cd ..\C-m"'
+
 alias p='python3'
 alias d='dolphin'
+
+alias u1='ssh u1'
+alias u2='ssh u2'
+alias u3='ssh u3'
+u1tunnel() {
+    ssh -N -L "$1:localhost:$1" u1
+}
+u2tunnel() {
+    ssh -N -L "$1:localhost:$1" u2
+}
+u3tunnel() {
+    ssh -N -L "$1:localhost:$1" u3
+}
+ 
+# numbered directory listing
+lsn() {
+  local old=$(shopt -p nullglob dotglob); shopt -s nullglob
+  local i=0 d f
+  for d in */; do
+    printf '%d: %s\n' "$i" "${d%/}"
+    ((i++))
+  done
+  for f in *; do
+    [[ -d $f ]] || printf '%s\n' "$f"
+  done
+  eval "$old"
+}
 
 # cd is cd+ls
 # cd -s is regular cd
@@ -10,11 +69,28 @@ cd() {
         shift
         builtin cd "$@"
     else
-        builtin cd "$@"
-        ls
+        builtin cd "$@" && lsn
     fi
 }
+_numcd() {
+  local n=${READLINE_LINE//[[:space:]]/}
+  [[ $n =~ ^[0-9]+$ ]] || return
+  local old=$(shopt -p nullglob dotglob); shopt -s nullglob
+  local dirs=(*/)
+  eval "$old"
+  local d=${dirs[$((10#$n))]}
+  if [[ -n $d ]]; then
+    READLINE_LINE="cd -- ${d@Q}"
+    READLINE_POINT=${#READLINE_LINE}
+  fi
+}
+bind -x '"\C-x\C-n": _numcd'
+bind '"\C-m": "\C-x\C-n\C-j"'
 
+
+
+alias john='$HOME/Cybersec_tools/john/run/john'
+alias hashcat='$HOME/Cybersec_tools/hashcat/hashcat'
 
 # Make a directory and enter that new directory
 mkdircd() {
@@ -37,10 +113,12 @@ alias sd='shutdown 0'
 alias rd='reboot'
 # Quick terminal exit alias
 alias e='exit'
+alias ee='exit'
 # ls aliases
 alias ll='ls -alF'
 alias la='ls -A'
 alias l='ls -CF'
+
 # Quick source alias
 alias s='source ~/.bashrc'
 # Windows clear alias
@@ -54,22 +132,114 @@ alias c='clear'
 alias topg='top -E g'
 # Bluetooth restart alias
 alias rbt='systemctl restart bluetooth'
+# Unzip and delete
+unziprm() {
+    unzip "$1"
+    rm "$1"
+}
+
+# Recursive shred
+smr() {
+    if [ -z "$1" ]; then
+        echo "usage: smr <directory>"
+        return 1
+    fi
+
+    if [ ! -d "$1" ]; then
+        echo "not a directory: $1"
+        return 1
+    fi
+
+    printf "Shred and remove '%s'? [y/N]: " "$1"
+    read -r ans
+    case "$ans" in
+        [yY][eE][sS]|[yY]) ;;
+        *) echo "aborted"; return 1 ;;
+    esac
+
+    if ! find "$1" -type f -exec shred -u {} +; then
+        echo "shred failed; directory not removed"
+        return 1
+    fi
+
+    rm -r "$1"
+}
+
+# Quick compile asm
+asm32() {
+    if [ -z "$1" ]; then
+        echo "No file provided"
+        return 1
+    fi
+    filename="${1%.*}"
+    nasm -f elf "$1" -o "${filename}.o"
+    ld -m elf_i386 -o "$filename" "${filename}.o"
+}
+asm64() {
+    if [ -z "$1" ]; then
+        echo "No file provided"
+        return 1
+    fi
+
+    filename="${1%.*}"
+    nasm -f elf64 "$1" -o "${filename}.o"
+    ld -o "$filename" "${filename}.o"
+}
+
+# Mount usb
+mnt() {
+    # Verify the user added the decive as an argument
+    if [ -z "$1" ]; then
+        echo "Usage: mnt <device>"
+        return 1
+    fi
+        # Ask for sudo
+        if ! sudo -v; then
+        return 1
+    fi
+    # Create the directory if it exists
+        if [ ! -d /mnt/$1 ]; then
+           sudo mkdir /mnt/$1
+        fi
+        if ! sudo mount /dev/$1 /mnt/$1; then
+           return 1
+        fi
+        cd /mnt/$1/
+}
+
+# Unmount usb
+unmnt() {
+    # Verify the user added the decive as an argument
+    if [ -z "$1" ]; then
+                echo "Usage: unmnt <device>"
+                return 1
+        fi
+    # Ask for sudo
+        if ! sudo -v; then
+        return 1
+    fi
+        # Return to main directory if the user is in the drives directory
+        if pwd | grep -q "/mnt/$1"; then
+            cd
+        fi
+        sudo umount /dev/$1
+}
 
 # Poweroff hard drive
 poffdrive() {
     # Verify the user added the decive as an argument
     if [ -z "$1" ]; then
-		echo "Usage: poffdrive <drive>"
-		return 1
-	fi
-	# Ask for sudo
+                echo "Usage: poffdrive <drive>"
+                return 1
+        fi
+        # Ask for sudo
     if ! sudo -v; then
         sudo -v
     fi
     # Unmount the device if it is mounted
-	if mount | grep -q "/dev/$1"; then
-	    unmnt $1
-	fi
+        if mount | grep -q "/dev/$1"; then
+            unmnt $1
+        fi
     sudo udisksctl power-off -b /dev/$1
 }
 
@@ -166,10 +336,10 @@ gpgdecrypt() {
     dcreated=0
     if [ ! -d "$outputDir" ]; then
         mkdir "$outputDir"
-		dcreated=1
-	fi
+                dcreated=1
+        fi
 
-	read -s -p "Enter passphrase for decryption: " passphrase
+        read -s -p "Enter passphrase for decryption: " passphrase
     echo
 
     # Check if the file was compressed as a whole
@@ -198,14 +368,14 @@ gpgdecrypt() {
         # Remove remaining decrypted parts
         rm "${outputDir}/${baseName}.tar.gz.part"*
 
-	# If the file type did not match any of the types
-	else
-    	# Remove any directory created by this command
-    	if [ "$dcreated" -eq 1 ]; then
-    	   rm -d "$outputDir"
-    	fi
-    	echo "The file did not match the .tar.gz.gpg or the .tar.gz.part*.gpg types"
-    	return 1
+        # If the file type did not match any of the types
+        else
+        # Remove any directory created by this command
+        if [ "$dcreated" -eq 1 ]; then
+           rm -d "$outputDir"
+        fi
+        echo "The file did not match the .tar.gz.gpg or the .tar.gz.part*.gpg types"
+        return 1
     fi
 }
 
@@ -256,4 +426,4 @@ ssh-status() {
   echo "=== Active SSH Sessions ==="
   ss -tnp dport = 22 | grep -v "^State" || echo "None"
 }
-
+alias cubeide='distrobox enter stm32 -- /opt/st/stm32cubeide_2.2.0/stm32cubeide_wayland'
