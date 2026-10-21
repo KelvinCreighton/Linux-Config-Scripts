@@ -49,9 +49,10 @@ u3tunnel() {
 }
  
 # numbered directory listing
+# numbered directory listing
 lsn() {
   local old=$(shopt -p nullglob dotglob); shopt -s nullglob
-  local i=0 d f
+  local i=1 d f
   for d in */; do
     printf '%d: %s\n' "$i" "${d%/}"
     ((i++))
@@ -72,13 +73,14 @@ cd() {
         builtin cd "$@" && lsn
     fi
 }
+
 _numcd() {
   local n=${READLINE_LINE//[[:space:]]/}
   [[ $n =~ ^[0-9]+$ ]] || return
   local old=$(shopt -p nullglob dotglob); shopt -s nullglob
   local dirs=(*/)
   eval "$old"
-  local d=${dirs[$((10#$n))]}
+  local d=${dirs[$((10#$n - 1))]}
   if [[ -n $d ]]; then
     READLINE_LINE="cd -- ${d@Q}"
     READLINE_POINT=${#READLINE_LINE}
@@ -86,7 +88,6 @@ _numcd() {
 }
 bind -x '"\C-x\C-n": _numcd'
 bind '"\C-m": "\C-x\C-n\C-j"'
-
 
 
 alias john='$HOME/Cybersec_tools/john/run/john'
