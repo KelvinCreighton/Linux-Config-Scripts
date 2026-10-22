@@ -49,28 +49,27 @@ u3tunnel() {
 }
  
 # numbered directory listing
-_DIGITS=1234qwerasdfzxcv
+_DIGITS=1234
 
 # index (0-based) -> label, result in REPLY
 _ncode() {
-  local n=$1 s=
-  while :; do
-    s=${_DIGITS:n%16:1}$s
-    ((n /= 16, n == 0)) && break
+  local n=$(($1 + 1)) s=
+  while ((n > 0)); do
+    ((n--))
+    s=${_DIGITS:n%4:1}$s
+    ((n /= 4))
   done
   REPLY=$s
 }
 
 # label -> index (0-based), result in REPLY; returns 1 if invalid
 _ndecode() {
-  local s=$1 c rest v=0 i
-  [[ $s =~ ^[1-4qwerasdfzxcv]+$ ]] || return 1
-  [[ ${#s} -gt 1 && $s == 1* ]] && return 1   # "1" is zero, so no leading 1s
+  local s=$1 v=0 i
+  [[ $s =~ ^[1-4]+$ ]] || return 1
   for ((i = 0; i < ${#s}; i++)); do
-    c=${s:i:1}; rest=${_DIGITS%%"$c"*}
-    v=$((v * 16 + ${#rest}))
+    v=$((v * 4 + ${s:i:1}))
   done
-  REPLY=$v
+  REPLY=$((v - 1))
 }
 
 lsn() {
@@ -102,8 +101,6 @@ _numcd() {
 }
 bind -x '"\C-x\C-n": _numcd'
 bind '"\C-m": "\C-x\C-n\C-j"'
-
-
 
 # cd is cd+ls
 # cd -s is regular cd
